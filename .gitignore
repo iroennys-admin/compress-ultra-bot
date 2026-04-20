@@ -1,0 +1,14 @@
+*.pyc
+__pycache__/
+.env
+downloads/
+compressed/
+*.mp4
+*.apk
+*.log
+*.db
+*.session
+*.session-journal
+.DS_Store
+venv/
+*.tmp
