@@ -1,21 +1,25 @@
 import subprocess
 import os
 import asyncio
-from config import FFMPEG_SETTINGS
+from config import FFMPEG_SETTINGS, ADMIN_ID
 
 class VideoCompressor:
     def __init__(self):
         self.active_compressions = {}
         
-    async def compress_video(self, input_path: str, output_path: str, quality: str = "medium"):
-        """Comprime video usando FFmpeg"""
+    async def compress_video(self, input_path: str, output_path: str, quality: str = "medium", user_id: int = None):
+        """Comprime video usando FFmpeg - SIN LÍMITES para admin"""
         try:
-            settings = FFMPEG_SETTINGS.get(quality, FFMPEG_SETTINGS["medium"])
+            # Verificar si es admin para usar máxima calidad
+            if user_id and user_id == ADMIN_ID:
+                settings = "-c:v libx265 -crf 18 -preset slow -c:a aac -b:a 192k"
+            else:
+                settings = FFMPEG_SETTINGS.get(quality, FFMPEG_SETTINGS["medium"])
             
             cmd = [
                 'ffmpeg', '-i', input_path,
                 *settings.split(),
-                '-y',  # Sobrescribir archivo si existe
+                '-y',
                 output_path
             ]
             
@@ -34,7 +38,7 @@ class VideoCompressor:
             if process.returncode == 0 and os.path.exists(output_path):
                 original_size = os.path.getsize(input_path)
                 compressed_size = os.path.getsize(output_path)
-                compression_ratio = (1 - compressed_size / original_size) * 100
+                compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
                 
                 return {
                     'success': True,
@@ -44,10 +48,11 @@ class VideoCompressor:
                     'compression_ratio': round(compression_ratio, 2)
                 }
             else:
-                return {'success': False, 'error': stderr.decode()}
+                error_msg = stderr.decode() if stderr else "Error desconocido"
+                return {'success': False, 'error': error_msg[:200]}
                 
         except Exception as e:
-            return {'success': False, 'error': str(e)}
+            return {'success': False, 'error': str(e)[:200]}
             
     async def cancel_compression(self, input_path: str):
         """Cancela compresión en curso"""

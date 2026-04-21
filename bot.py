@@ -65,14 +65,14 @@ async def start_command(client, message):
     welcome_text = f"""
 **¡Hola, {user.first_name}!**
 
-Bienvenido a **CompresUltra Bot V.6 Ultra Supabase**
+Bienvenido a **CompresUltra Bot V.6**
 🔥 **Comprimo tus videos con la mejor calidad**
 🎬 Motor: FFmpeg + libx265
 
 📊 Tu plan: **FREE**
 🌐 Modo: Público
 
-**Envía un video como documento o directo para comprimirlo.**
+**Envía un video para comprimirlo.**
 
 _Usa los botones de abajo para navegar_
 """
@@ -83,21 +83,18 @@ async def help_command(client, message):
     help_text = """
 **📚 Comandos Disponibles:**
 
-**Usuario:**
-/start - Bienvenida con menú
+/start - Menú principal
 /help - Ver comandos
-/miperfil - Tu perfil y estadísticas
+/miperfil - Tu perfil
 /calidad - Cambiar calidad
-/ping - Verificar si el bot responde
-/velocidad - Test de velocidad
+/ping - Verificar bot
+/velocidad - Test velocidad
 /id - Ver tu ID
 /about - Info del bot
 
-**YouTube:**
-/yt [url] - Descargar video de YouTube
-
-**APK:**
-/apk [url] - Descargar APK de APKPure
+**Descargas:**
+/yt [url] - YouTube
+/apk [url] - APKPure
 """
     await message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -123,26 +120,29 @@ async def profile_command(client, message):
 🆔 ID: `{user.id}`
 📊 Plan: **{user_data.get('plan', 'FREE')}**
 🎬 Calidad: **{QUALITIES.get(user_data.get('quality', 'medium'), 'Media')}**
-📦 Total compresiones: **{user_data.get('total_compressions', 0)}**
-💾 Total procesado: **{total_size_gb:.2f} GB**
-📅 Miembro desde: **{joined_date.strftime('%d/%m/%Y')}**
+📦 Compresiones: **{user_data.get('total_compressions', 0)}**
+💾 Procesado: **{total_size_gb:.2f} GB**
+📅 Miembro: **{joined_date.strftime('%d/%m/%Y')}**
 """
         await message.reply_text(profile_text, parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("calidad"))
 async def quality_command(client, message):
-    await message.reply_text("**🎬 Selecciona la calidad de compresión:**", reply_markup=quality_menu(), parse_mode=ParseMode.MARKDOWN)
+    await message.reply_text("**🎬 Selecciona la calidad:**", reply_markup=quality_menu(), parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("ping"))
 async def ping_command(client, message):
     start = time.time()
     msg = await message.reply_text("🏓 Pong!")
     end = time.time()
-    await msg.edit_text(f"🏓 **Pong!**\n⏱️ Latencia: `{(end - start) * 1000:.2f}ms`", parse_mode=ParseMode.MARKDOWN)
+    try:
+        await msg.edit_text(f"🏓 **Pong!**\n⏱️ `{(end - start) * 1000:.2f}ms`", parse_mode=ParseMode.MARKDOWN)
+    except:
+        pass
 
 @app.on_message(filters.command("velocidad"))
 async def speed_command(client, message):
-    msg = await message.reply_text("📊 Midiendo velocidad del servidor...")
+    msg = await message.reply_text("📊 Midiendo velocidad...")
     
     try:
         start = time.time()
@@ -161,130 +161,124 @@ async def speed_command(client, message):
         end = time.time()
         read_speed = 1 / (end - start) if (end - start) > 0 else 0
         
-        if os.path.exists(test_file):
-            os.remove(test_file)
+        os.remove(test_file)
         
-        cpu_percent = psutil.cpu_percent()
-        memory = psutil.virtual_memory()
+        cpu = psutil.cpu_percent()
+        mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         
-        speed_text = f"""
-**📊 Resultados del Test:**
+        text = f"""
+**📊 Resultados:**
 
-💾 **Escritura:** `{write_speed:.2f} MB/s`
-📀 **Lectura:** `{read_speed:.2f} MB/s`
+💾 Escritura: `{write_speed:.2f} MB/s`
+📀 Lectura: `{read_speed:.2f} MB/s`
 
-**💻 Sistema:**
-🖥️ CPU: `{cpu_percent}%`
-🧠 RAM: `{memory.percent}%`
+🖥️ CPU: `{cpu}%`
+🧠 RAM: `{mem.percent}%`
 💿 Disco: `{disk.percent}%`
-
-⏱️ **Test completado**
 """
-        await msg.edit_text(speed_text, parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text(text, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
-        await msg.edit_text(f"❌ Error en test: {str(e)}")
+        await msg.edit_text(f"❌ Error: {str(e)}")
 
 @app.on_message(filters.command("id"))
 async def id_command(client, message):
-    await message.reply_text(f"🆔 **Tu ID:** `{message.from_user.id}`", parse_mode=ParseMode.MARKDOWN)
+    await message.reply_text(f"🆔 `{message.from_user.id}`", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("about"))
 async def about_command(client, message):
     about_text = """
 **🤖 CompresUltra Bot V.6**
 
-🔥 Motor: **FFmpeg + libx265**
-📦 Base de datos: **SQLite**
-🚀 Hosting: **Render**
-👤 Dev: **@Iro_dev**
+🔥 FFmpeg + libx265
+📦 SQLite
+🚀 Render
+👤 @Iro_dev
 """
     await message.reply_text(about_text, parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("yt"))
 async def youtube_command(client, message):
     if len(message.command) < 2:
-        await message.reply_text("❌ **Uso:** `/yt [URL]`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text("❌ `/yt [URL]`", parse_mode=ParseMode.MARKDOWN)
         return
     
     url = message.command[1]
-    msg = await message.reply_text("🔍 **Analizando video...**", parse_mode=ParseMode.MARKDOWN)
+    msg = await message.reply_text("🔍 Analizando...", parse_mode=ParseMode.MARKDOWN)
     
     try:
         info = await youtube_dl.get_video_info(url)
         if not info:
-            await msg.edit_text("❌ **Error:** No se pudo obtener información del video")
+            await msg.edit_text("❌ Error al obtener info")
             return
         
         user_states[message.from_user.id] = {'yt_url': url, 'yt_info': info}
         
-        duration_min = info.get('duration', 0) // 60
-        duration_sec = info.get('duration', 0) % 60
-        
+        d = info.get('duration', 0)
         info_text = f"""
 **📹 Video Encontrado:**
 
-📌 **Título:** {info.get('title', 'Unknown')[:100]}
-⏱️ **Duración:** {duration_min}:{duration_sec:02d}
-🎬 **Formatos:** {len(info.get('formats', []))}
+📌 {info.get('title', 'Unknown')[:100]}
+⏱️ {d//60}:{d%60:02d}
+🎬 Formatos: {len(info.get('formats', []))}
 
-**Selecciona la calidad:**
+**Selecciona calidad:**
 """
         await msg.edit_text(info_text, reply_markup=youtube_format_menu(info.get('formats', [])), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
-        await msg.edit_text(f"❌ **Error:** {str(e)}")
+        await msg.edit_text(f"❌ Error: {str(e)}")
 
 @app.on_message(filters.command("apk"))
 async def apk_command(client, message):
     if len(message.command) < 2:
-        await message.reply_text("❌ **Uso:** `/apk [URL]`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text("❌ `/apk [URL]`", parse_mode=ParseMode.MARKDOWN)
         return
     
     url = message.command[1]
-    msg = await message.reply_text("🔍 **Analizando APK...**", parse_mode=ParseMode.MARKDOWN)
+    msg = await message.reply_text("🔍 Analizando APK...", parse_mode=ParseMode.MARKDOWN)
     
     try:
         info = await apk_dl.extract_apkpure_info(url)
         if not info:
-            await msg.edit_text("❌ **Error:** No se pudo obtener información del APK")
+            await msg.edit_text("❌ Error al obtener info")
             return
         
         info_text = f"""
 **📱 APK Encontrado:**
 
-📦 **Nombre:** {info.get('title', 'Unknown')}
-📌 **Paquete:** `{info.get('package_name', 'Unknown')}`
-🔄 **Versión:** {info.get('version', 'Unknown')}
-💾 **Tamaño:** {info.get('size', 'Unknown')}
+📦 {info.get('title', 'Unknown')}
+📌 `{info.get('package_name', 'Unknown')}`
+🔄 {info.get('version', 'Unknown')}
+💾 {info.get('size', 'Unknown')}
 
-⏳ **Iniciando descarga...**
+⏳ Descargando...
 """
         await msg.edit_text(info_text, parse_mode=ParseMode.MARKDOWN)
         
         apk_path = await apk_dl.download_apk(url)
         if apk_path and os.path.exists(apk_path):
-            file_size = os.path.getsize(apk_path)
-            await msg.edit_text(f"📤 **Subiendo APK...** ({file_size / (1024**2):.1f} MB)", parse_mode=ParseMode.MARKDOWN)
-            await message.reply_document(apk_path, caption=f"✅ **{info.get('title', 'APK')}**\n📦 Versión: {info.get('version', 'Unknown')}")
+            size = os.path.getsize(apk_path) / (1024**2)
+            await msg.edit_text(f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
+            await message.reply_document(apk_path, caption=f"✅ {info.get('title', 'APK')}")
             os.remove(apk_path)
             await msg.delete()
         else:
-            await msg.edit_text("❌ **Error:** No se pudo descargar el APK")
+            await msg.edit_text("❌ Error al descargar")
     except Exception as e:
-        await msg.edit_text(f"❌ **Error:** {str(e)}")
+        await msg.edit_text(f"❌ Error: {str(e)}")
 
 @app.on_message(filters.command("reporte"))
 async def report_command(client, message):
     if len(message.command) < 2:
-        await message.reply_text("❌ **Uso:** `/reporte [descripción]`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text("❌ `/reporte [texto]`", parse_mode=ParseMode.MARKDOWN)
         return
     
-    report_text = " ".join(message.command[1:])
+    text = " ".join(message.command[1:])
     try:
-        await client.send_message(ADMIN_ID, f"**🚨 Nuevo Reporte**\n\n👤 Usuario: {message.from_user.mention}\n🆔 ID: `{message.from_user.id}`\n\n📝 **Reporte:**\n{report_text}", parse_mode=ParseMode.MARKDOWN)
-        await message.reply_text("✅ **Reporte enviado.** Gracias!")
+        await client.send_message(ADMIN_ID, f"**🚨 Reporte**\n👤 {message.from_user.mention}\n🆔 `{message.from_user.id}`\n\n{text}", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text("✅ Enviado!")
     except:
-        await message.reply_text("❌ Error al enviar el reporte")
+        await message.reply_text("❌ Error")
 
 @app.on_message(filters.video | filters.document)
 async def handle_video(client, message):
@@ -295,6 +289,7 @@ async def handle_video(client, message):
         await message.reply_text("❌ Usa /start primero")
         return
     
+    # Verificar tipo de archivo
     if message.video:
         file_size = message.video.file_size
     elif message.document and message.document.mime_type and message.document.mime_type.startswith('video/'):
@@ -303,29 +298,71 @@ async def handle_video(client, message):
         await message.reply_text("❌ **Solo acepto archivos de video**")
         return
     
-    if file_size > 200 * 1024 * 1024:
-        await message.reply_text("❌ **Archivo demasiado grande** (Máx: 200MB)")
+    # SIN LÍMITE PARA ADMIN
+    if user_id != ADMIN_ID and file_size > 200 * 1024 * 1024:
+        await message.reply_text("❌ **Archivo demasiado grande** (Máx: 200MB para usuarios normales)")
         return
     
-    msg = await message.reply_text(f"📥 **Descargando video...**\n📦 Tamaño: {file_size / (1024**2):.1f} MB", parse_mode=ParseMode.MARKDOWN)
+    # Mensaje especial para admin
+    if user_id == ADMIN_ID:
+        await message.reply_text("👑 **Modo Admin Activado** - Sin límites, máxima calidad")
     
+    msg = await message.reply_text(
+        f"📥 **Descargando video...**\n"
+        f"📦 Tamaño: {file_size / (1024**2):.1f} MB\n"
+        f"🎬 Calidad: {QUALITIES.get(user_data.get('quality', 'medium'), 'Media')}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    # Descargar archivo
     download_path = await message.download("downloads/")
     if not download_path:
         await msg.edit_text("❌ **Error al descargar**")
         return
     
-    await msg.edit_text("🔄 **Comprimiendo video...**\n⏳ Esto puede tomar varios minutos", parse_mode=ParseMode.MARKDOWN)
+    await msg.edit_text(
+        "🔄 **Comprimiendo video...**\n"
+        "⏳ Esto puede tomar varios minutos",
+        parse_mode=ParseMode.MARKDOWN
+    )
     
+    # Comprimir video - PASAR user_id para admin
     output_path = f"compressed_{os.path.basename(download_path)}"
-    result = await compressor.compress_video(download_path, output_path, user_data.get('quality', 'medium'))
+    result = await compressor.compress_video(
+        download_path, 
+        output_path, 
+        user_data.get('quality', 'medium'),
+        user_id
+    )
     
+    # Limpiar archivo original
     if os.path.exists(download_path):
         os.remove(download_path)
     
     if result.get('success'):
-        await msg.edit_text(f"📤 **Subiendo video comprimido...**\n📊 Compresión: {result.get('compression_ratio', 0)}%", parse_mode=ParseMode.MARKDOWN)
-        await message.reply_video(result['output_path'], caption=f"✅ **Comprimido con CompresUltra**\n📊 Reducción: {result.get('compression_ratio', 0)}%")
+        compressed_size_mb = result.get('compressed_size', 0) / (1024**2)
+        ratio = result.get('compression_ratio', 0)
+        
+        await msg.edit_text(
+            f"📤 **Subiendo video comprimido...**\n"
+            f"📊 Compresión: {ratio}%\n"
+            f"💾 Nuevo tamaño: {compressed_size_mb:.1f} MB",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Enviar video comprimido
+        caption = f"✅ **Comprimido con CompresUltra**\n📊 Reducción: {ratio}%"
+        if user_id == ADMIN_ID:
+            caption = "👑 **Admin**\n" + caption
+            
+        await message.reply_video(
+            result['output_path'],
+            caption=caption
+        )
+        
+        # Actualizar estadísticas
         await db.update_stats(user_id, file_size)
+        
         if os.path.exists(result['output_path']):
             os.remove(result['output_path'])
         await msg.delete()
@@ -341,26 +378,25 @@ async def handle_callback(client, callback_query: CallbackQuery):
         await profile_command(client, callback_query.message)
     elif data == "plan":
         user_data = await db.get_user(user_id)
-        plan_text = f"**📊 Tu Plan Actual:**\n\n🎯 Plan: **{user_data.get('plan', 'FREE')}**"
         try:
-            await callback_query.message.edit_text(plan_text, parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text(f"**Plan:** {user_data.get('plan', 'FREE')}", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data == "quality":
         try:
-            await callback_query.message.edit_text("**🎬 Selecciona la calidad:**", reply_markup=quality_menu(), parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("**Selecciona calidad:**", reply_markup=quality_menu(), parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data.startswith("set_"):
         quality = data.replace("set_", "")
         user_data = await db.get_user(user_id)
         if quality == "ultra" and user_data.get('plan', 'FREE') == "FREE":
-            await callback_query.answer("❌ Calidad Ultra solo para Premium", show_alert=True)
+            await callback_query.answer("❌ Solo Premium", show_alert=True)
             return
         await db.update_quality(user_id, quality)
-        await callback_query.answer(f"✅ Calidad: {QUALITIES.get(quality, quality)}")
+        await callback_query.answer(f"✅ {QUALITIES.get(quality, quality)}")
         try:
-            await callback_query.message.edit_text(f"✅ **Calidad actualizada:** {QUALITIES.get(quality, quality)}", parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text(f"✅ Calidad: {QUALITIES.get(quality, quality)}", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data.startswith("yt_"):
@@ -370,66 +406,65 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.answer("❌ Sesión expirada", show_alert=True)
             return
         try:
-            await callback_query.message.edit_text("⏳ **Descargando video...**", parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("⏳ Descargando...", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
         video_path = await youtube_dl.download_video(state['yt_url'], format_id, "medium")
         if video_path and os.path.exists(video_path):
+            size = os.path.getsize(video_path) / (1024**2)
             try:
-                await callback_query.message.edit_text(f"📤 **Subiendo video...** ({os.path.getsize(video_path) / (1024**2):.1f} MB)", parse_mode=ParseMode.MARKDOWN)
+                await callback_query.message.edit_text(f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
             except:
                 pass
-            await callback_query.message.reply_video(video_path, caption=f"✅ **{state['yt_info'].get('title', 'Video')}**")
+            await callback_query.message.reply_video(video_path, caption=f"✅ {state['yt_info'].get('title', 'Video')}")
             os.remove(video_path)
             await callback_query.message.delete()
         else:
             try:
-                await callback_query.message.edit_text("❌ **Error al descargar**")
+                await callback_query.message.edit_text("❌ Error al descargar")
             except:
                 pass
         user_states.pop(user_id, None)
     elif data == "cancel_yt":
         user_states.pop(user_id, None)
         try:
-            await callback_query.message.edit_text("❌ **Descarga cancelada**")
+            await callback_query.message.edit_text("❌ Cancelado")
         except:
             pass
     elif data == "back_main":
         try:
-            await callback_query.message.edit_text("**🎬 Menú Principal**\n\n_Selecciona una opción:_", reply_markup=main_menu(), parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("**Menú Principal**", reply_markup=main_menu(), parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data == "help":
         await help_command(client, callback_query.message)
     elif data == "dev":
-        dev_text = "**👨‍💻 Desarrollador**\n\n🤖 Bot: **CompresUltra V.6**\n👤 Dev: **@Iro_dev**"
         try:
-            await callback_query.message.edit_text(dev_text, parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("**👤 @Iro_dev**", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data == "plans":
-        plans_text = "**💎 Planes Disponibles:**\n\n**🆓 FREE:** Compresión básica\n**⭐ PREMIUM:** $5/mes - 4K y sin límites"
         try:
-            await callback_query.message.edit_text(plans_text, parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("**💎 FREE:** Básico\n**⭐ PREMIUM:** $5/mes - 4K\n\n**👑 Admin:** Sin límites", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data == "queue":
-        position = await db.get_queue_position(user_id)
+        pos = await db.get_queue_position(user_id)
         try:
-            await callback_query.message.edit_text(f"**📋 Cola:**\n📊 Posición: **#{position}**", parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text(f"📊 Posición: **#{pos}**", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data == "report":
         try:
-            await callback_query.message.edit_text("**⚠️ Reportar:**\nUsa `/reporte [texto]`", parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("Usa `/reporte [texto]`", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     
     await callback_query.answer()
 
-# Servidor web falso para Render
+# ========== SERVIDOR WEB PARA RENDER ==========
 async def health_check(request):
-    return web.Response(text="Bot is running")
+    return web.Response(text="OK")
 
 async def start_web_server():
     app_web = web.Application()
@@ -439,14 +474,21 @@ async def start_web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"✅ Servidor web iniciado en puerto {port}")
+    print(f"✅ WEB: Puerto {port}")
 
-# Inicialización
+# ========== INICIALIZACIÓN ==========
 async def main():
-    await db.connect()
-    await app.start()
+    # 1. PRIMERO EL SERVIDOR WEB
     await start_web_server()
-    print("✅ Bot iniciado correctamente con SQLite!")
+    await asyncio.sleep(2)
+    
+    # 2. BASE DE DATOS
+    await db.connect()
+    
+    # 3. BOT DE TELEGRAM
+    await app.start()
+    print("✅ BOT: Iniciado!")
+    
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
