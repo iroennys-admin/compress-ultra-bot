@@ -41,7 +41,7 @@ class FileCompressor:
             elif method == 'brotli':
                 result = await loop.run_in_executor(None, self._compress_brotli, input_path, output_path)
             elif method == 'zstd':
-                result = await loop.run_in_executor(None, self._compress_zstd, input_path, output_path)
+                return self._compress_gzip(input_path, output_path)  # Fallback to gzip
             else:
                 result = await loop.run_in_executor(None, self._compress_gzip, input_path, output_path)
             
@@ -128,8 +128,6 @@ class FileCompressor:
                 return await loop.run_in_executor(None, self._decompress_tar, input_path, output_dir)
             elif file_ext == '.br':
                 return await loop.run_in_executor(None, self._decompress_brotli, input_path, output_dir)
-            elif file_ext == '.zst':
-                return await loop.run_in_executor(None, self._decompress_zstd, input_path, output_dir)
             else:
                 return {'success': False, 'error': f'Formato no soportado: {file_ext}'}
         except Exception as e:

@@ -2,7 +2,7 @@ services:
   - type: web
     name: compress-ultra-bot
     env: python
-    buildCommand: pip install -r requirements.txt && apk add --no-cache ffmpeg
+    buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: API_ID
