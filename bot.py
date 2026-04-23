@@ -56,14 +56,20 @@ def compression_method_menu():
         [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
     ])
 
-def youtube_format_menu(formats):
+def youtube_quality_menu(info):
     buttons = []
-    for fmt in formats[:8]:
-        label = f"{fmt['resolution']} - {fmt['ext']}"
+    formats = info.get('formats', [])
+    
+    for fmt in formats[:12]:
+        label = f"{fmt.get('resolution', 'Unknown')}"
         if fmt.get('filesize'):
-            size_mb = fmt['filesize'] / (1024 * 1024)
+            size_mb = fmt.get('filesize', 0) / (1024 * 1024)
             label += f" ({size_mb:.1f}MB)"
-        buttons.append([InlineKeyboardButton(label, callback_data=f"yt_{fmt['format_id']}")])
+        if fmt.get('ext'):
+            label += f" [{fmt.get('ext').upper()}]"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"yt_dl_{fmt['format_id']}")])
+    
+    buttons.append([InlineKeyboardButton("🔊 Solo Audio (MP3)", callback_data="yt_audio")])
     buttons.append([InlineKeyboardButton("🔙 Cancelar", callback_data="cancel_yt")])
     return InlineKeyboardMarkup(buttons)
 
@@ -79,6 +85,7 @@ Bienvenido a **CompresUltra Bot V.6**
 🔥 **Comprimo tus archivos y videos**
 📹 Videos: FFmpeg + libx265
 📄 Archivos: GZIP, ZIP, TAR.GZ
+🎬 YouTube: Cookies habilitadas
 
 📊 Tu plan: **FREE**
 🌐 Modo: Público
@@ -102,7 +109,7 @@ async def help_command(client, message):
 /about - Info del bot
 
 **Descargas:**
-/yt [url] - YouTube
+/yt [url] - YouTube (con calidad selectable)
 /apk [url] - APKPure
 
 **Compresión:**
@@ -206,6 +213,7 @@ async def about_command(client, message):
 
 🔥 FFmpeg + libx265 (Videos)
 🗜️ GZIP/ZIP/TAR.GZ (Archivos)
+🎬 YouTube con Cookies
 📦 SQLite
 🚀 Render
 👤 @Iro_dev
@@ -234,27 +242,38 @@ async def youtube_command(client, message):
         return
     
     url = message.command[1]
-    msg = await message.reply_text("🔍 Analizando...", parse_mode=ParseMode.MARKDOWN)
+    msg = await message.reply_text("🔍 Analizando video...", parse_mode=ParseMode.MARKDOWN)
     
     try:
         info = await youtube_dl.get_video_info(url)
         if not info:
-            await msg.edit_text("❌ Error al obtener info")
+            await msg.edit_text("❌ Error al obtener información del video")
             return
         
         user_states[message.from_user.id] = {'yt_url': url, 'yt_info': info}
         
         d = info.get('duration', 0)
+        minutes = d // 60
+        seconds = d % 60
+        
+        view_count = info.get('view_count', 0)
+        if view_count > 0:
+            views = f"👁️ {view_count:,} vistas"
+        else:
+            views = ""
+        
         info_text = f"""
 **📹 Video Encontrado:**
 
-📌 {info.get('title', 'Unknown')[:100]}
-⏱️ {d//60}:{d%60:02d}
-🎬 Formatos: {len(info.get('formats', []))}
+📌 **{info.get('title', 'Unknown')}**
+👤 {info.get('uploader', 'Unknown')}
+⏱️ {minutes}:{seconds:02d}
+{views}
 
-**Selecciona calidad:**
+**Selecciona la calidad:**
 """
-        await msg.edit_text(info_text, reply_markup=youtube_format_menu(info.get('formats', [])), parse_mode=ParseMode.MARKDOWN)
+        await msg.edit_text(info_text, reply_markup=youtube_quality_menu(info), parse_mode=ParseMode.MARKDOWN)
+        
     except Exception as e:
         await msg.edit_text(f"❌ Error: {str(e)}")
 
@@ -578,17 +597,21 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.message.edit_text(f"**📄 Método {method.upper()} seleccionado.**\n\nEnvía un archivo para comprimirlo.", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
-    elif data.startswith("yt_"):
-        format_id = data.replace("yt_", "")
+    elif data.startswith("yt_dl_"):
+        format_id = data.replace("yt_dl_", "")
         state = user_states.get(user_id, {})
+        
         if not state:
             await callback_query.answer("❌ Sesión expirada", show_alert=True)
             return
+        
         try:
-            await callback_query.message.edit_text("⏳ Descargando...", parse_mode=ParseMode.MARKDOWN)
+            await callback_query.message.edit_text("⏳ Descargando video...", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
-        video_path = await youtube_dl.download_video(state['yt_url'], format_id, "medium")
+        
+        video_path = await youtube_dl.download_video(state['yt_url'], format_id=format_id)
+        
         if video_path and os.path.exists(video_path):
             size = os.path.getsize(video_path) / (1024**2)
             try:
@@ -600,9 +623,40 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.message.delete()
         else:
             try:
-                await callback_query.message.edit_text("❌ Error al descargar")
+                await callback_query.message.edit_text("❌ Error al descargar el video")
             except:
                 pass
+        
+        user_states.pop(user_id, None)
+    elif data == "yt_audio":
+        state = user_states.get(user_id, {})
+        
+        if not state:
+            await callback_query.answer("❌ Sesión expirada", show_alert=True)
+            return
+        
+        try:
+            await callback_query.message.edit_text("⏳ Descargando audio...", parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+        
+        video_path = await youtube_dl.download_video(state['yt_url'], format_id="bestaudio")
+        
+        if video_path and os.path.exists(video_path):
+            size = os.path.getsize(video_path) / (1024**2)
+            try:
+                await callback_query.message.edit_text(f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
+            except:
+                pass
+            await callback_query.message.reply_document(video_path, caption=f"🎵 {state['yt_info'].get('title', 'Audio')}")
+            os.remove(video_path)
+            await callback_query.message.delete()
+        else:
+            try:
+                await callback_query.message.edit_text("❌ Error al descargar el audio")
+            except:
+                pass
+        
         user_states.pop(user_id, None)
     elif data == "cancel_yt":
         user_states.pop(user_id, None)

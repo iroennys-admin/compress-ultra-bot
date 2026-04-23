@@ -15,8 +15,15 @@ class YouTubeDownloader:
 
     async def get_video_info(self, url: str) -> Optional[Dict]:
         try:
-            opts = self.ydl_opts.copy()
-            opts['extract_flat'] = True
+            opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
+                'extract_info口味': True,
+            }
+            
+            if os.path.exists('cookies.txt'):
+                opts['cookiefile'] = 'cookies.txt'
             
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -25,74 +32,71 @@ class YouTubeDownloader:
                     return None
                 
                 duration = info.get('duration', 0)
-                
                 formats = []
-                available_formats = info.get('formats', [])
                 
-                seen_resolutions = set()
-                for fmt in available_formats:
+                seen_formats = set()
+                
+                for fmt in info.get('formats', []):
+                    format_id = fmt.get('format_id', '')
+                    ext = fmt.get('ext', 'mp4')
                     height = fmt.get('height')
-                    if height and height not in seen_resolutions:
-                        seen_resolutions.add(height)
-                        
-                        format_id = fmt.get('format_id', '')
-                        ext = fmt.get('ext', 'mp4')
-                        
-                        if height == 360:
+                    filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
+                    
+                    if format_id in seen_formats:
+                        continue
+                    
+                    if height:
+                        key = f"{height}p_{ext}"
+                        if key not in seen_formats:
+                            seen_formats.add(key)
                             formats.append({
-                                'format_id': '18',
+                                'format_id': format_id,
                                 'ext': ext,
-                                'resolution': '360p',
-                                'filesize': fmt.get('filesize') or fmt.get('filesize_approx')
-                            })
-                        elif height == 720:
-                            formats.append({
-                                'format_id': '22',
-                                'ext': ext,
-                                'resolution': '720p',
-                                'filesize': fmt.get('filesize') or fmt.get('filesize_approx')
-                            })
-                        elif height == 1080:
-                            formats.append({
-                                'format_id': '37',
-                                'ext': ext,
-                                'resolution': '1080p',
-                                'filesize': fmt.get('filesize') or fmt.get('filesize_approx')
+                                'resolution': f"{height}p",
+                                'filesize': filesize,
+                                'tbr': fmt.get('tbr', 0),
+                                'vcodec': fmt.get('vcodec', 'none'),
+                                'acodec': fmt.get('acodec', 'none'),
                             })
                 
-                if len(formats) < 3:
-                    formats = [
-                        {'format_id': '18', 'ext': 'mp4', 'resolution': '360p'},
-                        {'format_id': '22', 'ext': 'mp4', 'resolution': '720p'},
-                        {'format_id': '37', 'ext': 'mp4', 'resolution': '1080p'},
-                    ]
+                formats.sort(key=lambda x: int(x['resolution'].replace('p', '')) if x['resolution'].replace('p', '').isdigit() else 0)
+                
+                if len(formats) > 12:
+                    formats = formats[:12]
                 
                 return {
                     'id': info.get('id'),
                     'title': info.get('title', 'Unknown')[:100],
                     'duration': duration,
                     'thumbnail': info.get('thumbnail'),
-                    'formats': formats[:8]
+                    'uploader': info.get('uploader', 'Unknown'),
+                    'view_count': info.get('view_count', 0),
+                    'like_count': info.get('like_count', 0),
+                    'formats': formats
                 }
         except Exception as e:
             print(f"Error getting video info: {e}")
             return None
 
-    async def download_video(self, url: str, format_id: str, quality: str = "medium") -> Optional[str]:
+    async def download_video(self, url: str, format_id: str = None, quality: str = "720p") -> Optional[str]:
         try:
             os.makedirs("downloads", exist_ok=True)
-            output_path = "downloads/%(id)s.%(ext)s"
             
             opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'format': format_id,
-                'outtmpl': output_path,
-                'max_filesize': 2 * 1024 * 1024 * 1024,
+                'outtmpl': 'downloads/%(id)s.%(ext)s',
+                'merge_output_format': 'mp4',
             }
             
             if os.path.exists('cookies.txt'):
                 opts['cookiefile'] = 'cookies.txt'
+            
+            if format_id:
+                opts['format'] = format_id
+            else:
+                height = quality.replace('p', '')
+                opts['format'] = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]'
             
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -102,23 +106,44 @@ class YouTubeDownloader:
                     if os.path.exists(filename):
                         return filename
                     
-                    mp4_file = filename.rsplit('.', 1)[0] + '.mp4'
-                    if os.path.exists(mp4_file):
-                        return mp4_file
+                    for ext in ['mp4', 'webm', 'mkv', 'flv', 'avi', 'mov']:
+                        test_file = f"downloads/test.{ext}"
+                        if os.path.exists(test_file):
+                            return test_file
                     
-                    webm_file = filename.rsplit('.', 1)[0] + '.webm'
-                    if os.path.exists(webm_file):
-                        return webm_file
-                
-                for ext in ['mp4', 'webm', 'mkv', 'flv']:
-                    test_file = f"downloads/test.{ext}"
-                    if os.path.exists(test_file):
-                        return test_file
-                        
+                    files = os.listdir('downloads')
+                    for f in files:
+                        if info.get('id') in f:
+                            return os.path.join('downloads', f)
+            
             return None
                 
         except Exception as e:
             print(f"Error downloading video: {e}")
             return None
+
+    async def get_formats_list(self, info: Dict) -> List[Dict]:
+        formats = []
+        
+        resolution_files = {}
+        
+        for fmt in info.get('formats', []):
+            height = fmt.get('height')
+            if not height:
+                continue
+            
+            resolution = f"{height}p"
+            if resolution not in resolution_files:
+                resolution_files[resolution] = {
+                    'format_id': fmt.get('format_id'),
+                    'ext': fmt.get('ext', 'mp4'),
+                    'resolution': resolution,
+                    'filesize': fmt.get('filesize') or fmt.get('filesize_approx', 0),
+                }
+        
+        for res, data in sorted(resolution_files.items(), key=lambda x: int(x[0].replace('p', ''))):
+            formats.append(data)
+        
+        return formats[:10]
 
 youtube_dl = YouTubeDownloader()
