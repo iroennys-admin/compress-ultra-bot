@@ -11,6 +11,11 @@ class YouTubeDownloader:
             opts = {
                 'quiet': True,
                 'no_warnings': True,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                    }
+                },
             }
             
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -27,11 +32,6 @@ class YouTubeDownloader:
                     height = fmt.get('height')
                     format_id = fmt.get('format_id', '')
                     filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
-                    vcodec = fmt.get('vcodec', 'none')
-                    acodec = fmt.get('acodec', 'none')
-                    
-                    has_video = vcodec != 'none'
-                    has_audio = acodec != 'none'
                     
                     if height and height not in seen:
                         seen.add(height)
@@ -39,7 +39,6 @@ class YouTubeDownloader:
                             'format_id': format_id,
                             'resolution': f"{height}p",
                             'filesize': filesize,
-                            'combined': has_video and has_audio,
                         })
                 
                 formats.sort(key=lambda x: int(x['resolution'].replace('p', '')))
@@ -65,13 +64,18 @@ class YouTubeDownloader:
                 'quiet': False,
                 'no_warnings': True,
                 'outtmpl': 'downloads/%(id)s.%(ext)s',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                    }
+                },
             }
             
             if format_id == 'bestaudio':
                 opts['format'] = 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'
             elif quality:
                 height = quality.replace('p', '')
-                opts['format'] = f'best[height<={height}][ext=mp4]/best[height<={height}]/best'
+                opts['format'] = f'best[height<={height}]/best'
             else:
                 opts['format'] = 'best'
             
