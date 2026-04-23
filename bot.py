@@ -229,6 +229,12 @@ async def about_command(client, message):
 """
     await message.reply_text(about_text, parse_mode=ParseMode.MARKDOWN)
 
+async def safe_edit(message, text, **kwargs):
+    try:
+        await message.edit_text(text, **kwargs)
+    except Exception:
+        pass
+
 @app.on_message(filters.command("yt"))
 async def youtube_command(client, message):
     if len(message.command) < 2:
@@ -241,7 +247,7 @@ async def youtube_command(client, message):
     try:
         info = await youtube_dl.get_video_info(url)
         if not info:
-            await msg.edit_text("❌ Error al obtener información del video")
+            await safe_edit(msg, "❌ Error al obtener información del video", parse_mode=ParseMode.MARKDOWN)
             return
         
         user_states[message.from_user.id] = {'yt_url': url, 'yt_info': info}
@@ -266,10 +272,10 @@ async def youtube_command(client, message):
 
 **Selecciona la calidad:**
 """
-        await msg.edit_text(info_text, reply_markup=youtube_quality_menu(info), parse_mode=ParseMode.MARKDOWN)
+        await safe_edit(msg, info_text, reply_markup=youtube_quality_menu(info), parse_mode=ParseMode.MARKDOWN)
         
     except Exception as e:
-        await msg.edit_text(f"❌ Error: {str(e)}")
+        await safe_edit(msg, f"❌ Error: {str(e)}", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("apk"))
 async def apk_command(client, message):
@@ -406,6 +412,12 @@ async def handle_file(client, message):
 """
     await message.reply_text(text, reply_markup=file_compress_method_menu(), parse_mode=ParseMode.MARKDOWN)
 
+async def safe_edit(message, text, **kwargs):
+    try:
+        await message.edit_text(text, **kwargs)
+    except Exception:
+        pass
+
 async def process_video_compression(client, message, quality, user_id, file_path, file_size, user_data):
     quality_map = {
         'video_480p': 'low',
@@ -416,7 +428,7 @@ async def process_video_compression(client, message, quality, user_id, file_path
     
     quality_key = quality_map.get(quality, 'medium')
     
-    msg = await message.reply_text(
+    await safe_edit(message,
         f"🔄 **Comprimiendo video...**\n"
         f"🎬 Calidad: {QUALITIES.get(quality_key, 'Media')}\n"
         f"⏳ Espera un momento...",
@@ -431,12 +443,12 @@ async def process_video_compression(client, message, quality, user_id, file_path
             timeout=600
         )
     except asyncio.TimeoutError:
-        await msg.edit_text("❌ **Tiempo de compresión agotado**")
+        await safe_edit(message, "❌ **Tiempo de compresión agotado**")
         if os.path.exists(file_path):
             os.remove(file_path)
         return
     except Exception as e:
-        await msg.edit_text(f"❌ **Error:** {str(e)}")
+        await safe_edit(message, f"❌ **Error:** {str(e)}")
         if os.path.exists(file_path):
             os.remove(file_path)
         return
@@ -448,7 +460,7 @@ async def process_video_compression(client, message, quality, user_id, file_path
         compressed_size_mb = result.get('compressed_size', 0) / (1024**2)
         ratio = result.get('compression_ratio', 0)
         
-        await msg.edit_text(
+        await safe_edit(message,
             f"📤 **Subiendo...**\n"
             f"💾 Nuevo tamaño: {compressed_size_mb:.1f} MB\n"
             f"📊 Reducción: {ratio}%",
@@ -465,12 +477,11 @@ async def process_video_compression(client, message, quality, user_id, file_path
         
         if os.path.exists(result['output_path']):
             os.remove(result['output_path'])
-        await msg.delete()
     else:
-        await msg.edit_text(f"❌ **Error en compresión:**\n{result.get('error', 'Error desconocido')}")
+        await safe_edit(message, f"❌ **Error en compresión:**\n{result.get('error', 'Error desconocido')}", parse_mode=ParseMode.MARKDOWN)
 
 async def process_file_compression(client, message, method, user_id, file_path, file_size):
-    msg = await message.reply_text(
+    await safe_edit(message,
         f"🔄 **Comprimiendo con {method.upper()}...**\n"
         f"⏳ Espera un momento...",
         parse_mode=ParseMode.MARKDOWN
@@ -482,12 +493,12 @@ async def process_file_compression(client, message, method, user_id, file_path, 
             timeout=300
         )
     except asyncio.TimeoutError:
-        await msg.edit_text("❌ **Tiempo de compresión agotado**")
+        await safe_edit(message, "❌ **Tiempo de compresión agotado**")
         if os.path.exists(file_path):
             os.remove(file_path)
         return
     except Exception as e:
-        await msg.edit_text(f"❌ **Error:** {str(e)}")
+        await safe_edit(message, f"❌ **Error:** {str(e)}")
         if os.path.exists(file_path):
             os.remove(file_path)
         return
@@ -500,7 +511,7 @@ async def process_file_compression(client, message, method, user_id, file_path, 
         ratio = result.get('compression_ratio', 0)
         original_mb = result.get('original_size', 0) / (1024**2)
         
-        await msg.edit_text(
+        await safe_edit(message,
             f"📤 **Subiendo...**\n"
             f"📦 {original_mb:.2f} MB → {compressed_mb:.2f} MB\n"
             f"📊 Reducción: {ratio}%",
@@ -514,9 +525,8 @@ async def process_file_compression(client, message, method, user_id, file_path, 
         
         if os.path.exists(result['output_path']):
             os.remove(result['output_path'])
-        await msg.delete()
     else:
-        await msg.edit_text(f"❌ **Error:** {result.get('error', 'Error desconocido')}")
+        await safe_edit(message, f"❌ **Error:** {result.get('error', 'Error desconocido')}", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_callback_query()
 async def handle_callback(client, callback_query: CallbackQuery):
@@ -613,27 +623,18 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.answer("❌ Sesión expirada", show_alert=True)
             return
         
-        try:
-            await callback_query.message.edit_text("⏳ Descargando...", parse_mode=ParseMode.MARKDOWN)
-        except:
-            pass
+        await safe_edit(callback_query.message, "⏳ Descargando...", parse_mode=ParseMode.MARKDOWN)
         
         video_path = await youtube_dl.download_video(state['yt_url'], format_id=format_id)
         
         if video_path and os.path.exists(video_path):
             size = os.path.getsize(video_path) / (1024**2)
-            try:
-                await callback_query.message.edit_text(f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
-            except:
-                pass
+            await safe_edit(callback_query.message, f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
             await callback_query.message.reply_video(video_path, caption=f"✅ {state['yt_info'].get('title', 'Video')}")
             os.remove(video_path)
             await callback_query.message.delete()
         else:
-            try:
-                await callback_query.message.edit_text("❌ Error al descargar")
-            except:
-                pass
+            await safe_edit(callback_query.message, "❌ Error al descargar", parse_mode=ParseMode.MARKDOWN)
         
         user_states.pop(user_id, None)
     elif data == "yt_audio":
@@ -643,27 +644,18 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.answer("❌ Sesión expirada", show_alert=True)
             return
         
-        try:
-            await callback_query.message.edit_text("⏳ Descargando audio...", parse_mode=ParseMode.MARKDOWN)
-        except:
-            pass
+        await safe_edit(callback_query.message, "⏳ Descargando audio...", parse_mode=ParseMode.MARKDOWN)
         
         video_path = await youtube_dl.download_video(state['yt_url'], format_id="bestaudio")
         
         if video_path and os.path.exists(video_path):
             size = os.path.getsize(video_path) / (1024**2)
-            try:
-                await callback_query.message.edit_text(f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
-            except:
-                pass
+            await safe_edit(callback_query.message, f"📤 Subiendo ({size:.1f} MB)...", parse_mode=ParseMode.MARKDOWN)
             await callback_query.message.reply_document(video_path, caption=f"🎵 {state['yt_info'].get('title', 'Audio')}")
             os.remove(video_path)
             await callback_query.message.delete()
         else:
-            try:
-                await callback_query.message.edit_text("❌ Error al descargar")
-            except:
-                pass
+            await safe_edit(callback_query.message, "❌ Error al descargar", parse_mode=ParseMode.MARKDOWN)
         
         user_states.pop(user_id, None)
     elif data == "cancel_yt":
