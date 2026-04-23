@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import time
 import psutil
 from pyrogram import Client, filters
@@ -22,6 +23,28 @@ app = Client(
 )
 
 user_states = {}
+
+YOUTUBE_PATTERNS = [
+    r'(https?://)?(www\.)?youtube\.com/watch\?v=[\w-]+',
+    r'(https?://)?(www\.)?youtu\.be/[\w-]+',
+    r'(https?://)?(www\.)?youtube\.com/shorts/[\w-]+',
+]
+
+def is_youtube_url(text):
+    for pattern in YOUTUBE_PATTERNS:
+        if re.search(pattern, text):
+            return True
+    return False
+
+def extract_youtube_url(text):
+    for pattern in YOUTUBE_PATTERNS:
+        match = re.search(pattern, text)
+        if match:
+            url = match.group(0)
+            if not url.startswith('http'):
+                url = 'https://' + url
+            return url
+    return None
 
 def main_menu():
     return InlineKeyboardMarkup([
@@ -234,6 +257,46 @@ async def safe_edit(message, text, **kwargs):
         await message.edit_text(text, **kwargs)
     except Exception:
         pass
+
+@app.on_message(filters.text & filters.incoming)
+async def auto_youtube_detect(client, message):
+    if message.text and is_youtube_url(message.text):
+        user_data = await db.get_user(message.from_user.id)
+        if not user_data:
+            await db.create_user(message.from_user.id, message.from_user.username, message.from_user.first_name)
+        
+        url = extract_youtube_url(message.text)
+        msg = await message.reply_text("🔍 Analizando video...", parse_mode=ParseMode.MARKDOWN)
+        
+        try:
+            info = await youtube_dl.get_video_info(url)
+            if not info:
+                await safe_edit(msg, "❌ Error al obtener información del video", parse_mode=ParseMode.MARKDOWN)
+                return
+            
+            user_states[message.from_user.id] = {'yt_url': url, 'yt_info': info}
+            
+            d = info.get('duration', 0)
+            minutes = d // 60
+            seconds = d % 60
+            
+            view_count = info.get('view_count', 0)
+            views = f"👁️ {view_count:,} vistas" if view_count > 0 else ""
+            
+            info_text = f"""
+**📹 Video Encontrado:**
+
+📌 **{info.get('title', 'Unknown')}**
+👤 {info.get('uploader', 'Unknown')}
+⏱️ {minutes}:{seconds:02d}
+{views}
+
+**Selecciona la calidad:**
+"""
+            await safe_edit(msg, info_text, reply_markup=youtube_quality_menu(info), parse_mode=ParseMode.MARKDOWN)
+            
+        except Exception as e:
+            await safe_edit(msg, f"❌ Error: {str(e)}", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("yt"))
 async def youtube_command(client, message):
