@@ -12,8 +12,8 @@ from database import db
 from youtube_handler import youtube_dl
 from apk_handler import apk_dl
 from compress_handler import compressor
+from file_compress_handler import file_compressor
 
-# Inicializar bot
 app = Client(
     "compress_ultra_bot",
     api_id=API_ID,
@@ -21,12 +21,14 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
-# Diccionario para estados temporales
 user_states = {}
 
-# Botones del menú principal
 def main_menu():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📹 Comprimir Video", callback_data="compress_video"),
+         InlineKeyboardButton("📄 Comprimir Archivo", callback_data="compress_file")],
+        [InlineKeyboardButton("📥 Descomprimir", callback_data="decompress"),
+         InlineKeyboardButton("📊 Comparar Métodos", callback_data="compare_methods")],
         [InlineKeyboardButton("👤 Mi Perfil", callback_data="profile"),
          InlineKeyboardButton("📊 Mi Plan", callback_data="plan")],
         [InlineKeyboardButton("🎬 Cambiar Calidad", callback_data="quality"),
@@ -43,6 +45,14 @@ def quality_menu():
         [InlineKeyboardButton("🔸 720p (Media)", callback_data="set_medium")],
         [InlineKeyboardButton("🔶 1080p (Alta)", callback_data="set_high")],
         [InlineKeyboardButton("💎 4K (Ultra) - Premium", callback_data="set_ultra")],
+        [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
+    ])
+
+def compression_method_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🗜️ GZIP (Rápido)", callback_data="method_gzip")],
+        [InlineKeyboardButton("📦 ZIP (Universal)", callback_data="method_zip")],
+        [InlineKeyboardButton("📁 TAR.GZ (Lote)", callback_data="method_tar")],
         [InlineKeyboardButton("🔙 Volver", callback_data="back_main")]
     ])
 
@@ -66,15 +76,14 @@ async def start_command(client, message):
 **¡Hola, {user.first_name}!**
 
 Bienvenido a **CompresUltra Bot V.6**
-🔥 **Comprimo tus videos con la mejor calidad**
-🎬 Motor: FFmpeg + libx265
+🔥 **Comprimo tus archivos y videos**
+📹 Videos: FFmpeg + libx265
+📄 Archivos: GZIP, ZIP, TAR.GZ
 
 📊 Tu plan: **FREE**
 🌐 Modo: Público
 
-**Envía un video para comprimirlo.**
-
-_Usa los botones de abajo para navegar_
+**Envía un video o archivo para comprimirlo.**
 """
     await message.reply_text(welcome_text, reply_markup=main_menu(), parse_mode=ParseMode.MARKDOWN)
 
@@ -86,7 +95,7 @@ async def help_command(client, message):
 /start - Menú principal
 /help - Ver comandos
 /miperfil - Tu perfil
-/calidad - Cambiar calidad
+/calidad - Cambiar calidad (videos)
 /ping - Verificar bot
 /velocidad - Test velocidad
 /id - Ver tu ID
@@ -95,6 +104,11 @@ async def help_command(client, message):
 **Descargas:**
 /yt [url] - YouTube
 /apk [url] - APKPure
+
+**Compresión:**
+/comprimir - Elegir método
+/descomprimir - Descomprimir archivo
+/comparar - Comparar métodos
 """
     await message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -190,12 +204,28 @@ async def about_command(client, message):
     about_text = """
 **🤖 CompresUltra Bot V.6**
 
-🔥 FFmpeg + libx265
+🔥 FFmpeg + libx265 (Videos)
+🗜️ GZIP/ZIP/TAR.GZ (Archivos)
 📦 SQLite
 🚀 Render
 👤 @Iro_dev
 """
     await message.reply_text(about_text, parse_mode=ParseMode.MARKDOWN)
+
+@app.on_message(filters.command("comprimir"))
+async def compress_method_command(client, message):
+    user_states[message.from_user.id] = {'action': 'compress_file'}
+    await message.reply_text("**📄 Selecciona el método de compresión:**", reply_markup=compression_method_menu(), parse_mode=ParseMode.MARKDOWN)
+
+@app.on_message(filters.command("descomprimir"))
+async def decompress_command(client, message):
+    user_states[message.from_user.id] = {'action': 'decompress'}
+    await message.reply_text("📄 **Envía el archivo comprimido para descomprimirlo.**", parse_mode=ParseMode.MARKDOWN)
+
+@app.on_message(filters.command("comparar"))
+async def compare_command(client, message):
+    user_states[message.from_user.id] = {'action': 'compare'}
+    await message.reply_text("📊 **Envía un archivo para comparar todos los métodos.**", parse_mode=ParseMode.MARKDOWN)
 
 @app.on_message(filters.command("yt"))
 async def youtube_command(client, message):
@@ -289,7 +319,6 @@ async def handle_video(client, message):
         await message.reply_text("❌ Usa /start primero")
         return
     
-    # Verificar tipo de archivo
     if message.video:
         file_size = message.video.file_size
     elif message.document and message.document.mime_type and message.document.mime_type.startswith('video/'):
@@ -298,12 +327,10 @@ async def handle_video(client, message):
         await message.reply_text("❌ **Solo acepto archivos de video**")
         return
     
-    # SIN LÍMITE PARA ADMIN
     if user_id != ADMIN_ID and file_size > 200 * 1024 * 1024:
         await message.reply_text("❌ **Archivo demasiado grande** (Máx: 200MB para usuarios normales)")
         return
     
-    # Mensaje especial para admin
     if user_id == ADMIN_ID:
         await message.reply_text("👑 **Modo Admin Activado** - Sin límites, máxima calidad")
     
@@ -314,7 +341,6 @@ async def handle_video(client, message):
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Descargar archivo
     download_path = await message.download("downloads/")
     if not download_path:
         await msg.edit_text("❌ **Error al descargar**")
@@ -326,7 +352,6 @@ async def handle_video(client, message):
         parse_mode=ParseMode.MARKDOWN
     )
     
-    # Comprimir video - PASAR user_id para admin
     output_path = f"compressed_{os.path.basename(download_path)}"
     result = await compressor.compress_video(
         download_path, 
@@ -335,7 +360,6 @@ async def handle_video(client, message):
         user_id
     )
     
-    # Limpiar archivo original
     if os.path.exists(download_path):
         os.remove(download_path)
     
@@ -350,7 +374,6 @@ async def handle_video(client, message):
             parse_mode=ParseMode.MARKDOWN
         )
         
-        # Enviar video comprimido
         caption = f"✅ **Comprimido con CompresUltra**\n📊 Reducción: {ratio}%"
         if user_id == ADMIN_ID:
             caption = "👑 **Admin**\n" + caption
@@ -360,7 +383,6 @@ async def handle_video(client, message):
             caption=caption
         )
         
-        # Actualizar estadísticas
         await db.update_stats(user_id, file_size)
         
         if os.path.exists(result['output_path']):
@@ -368,6 +390,132 @@ async def handle_video(client, message):
         await msg.delete()
     else:
         await msg.edit_text(f"❌ **Error en compresión:**\n{result.get('error', 'Error desconocido')}")
+
+@app.on_message(filters.document | filters.photo)
+async def handle_file(client, message):
+    user_id = message.from_user.id
+    user_data = await db.get_user(user_id)
+    
+    if not user_data:
+        await message.reply_text("❌ Usa /start primero")
+        return
+    
+    state = user_states.get(user_id, {})
+    action = state.get('action', 'compress_file')
+    
+    if message.photo:
+        file_path = await message.download("downloads/")
+        is_photo = True
+        file_size = message.photo.file_size
+        file_name = f"photo_{message.photo.file_unique_id}.jpg"
+    else:
+        doc = message.document
+        file_size = doc.file_size
+        file_path = await message.download("downloads/")
+        file_name = doc.file_name or f"file_{doc.file_unique_id}"
+    
+    if not file_path:
+        await message.reply_text("❌ **Error al descargar**")
+        return
+    
+    if action == 'decompress':
+        msg = await message.reply_text("📤 **Descomprimiendo...**", parse_mode=ParseMode.MARKDOWN)
+        
+        result = await file_compressor.decompress_file(file_path)
+        
+        os.remove(file_path)
+        
+        if result.get('success'):
+            output_paths = result.get('output_paths', [result.get('output_path')])
+            
+            await msg.edit_text("📤 **Subiendo archivos...**", parse_mode=ParseMode.MARKDOWN)
+            
+            for output_file in output_paths:
+                if output_file and os.path.exists(output_file):
+                    await message.reply_document(output_file, caption=f"✅ Descomprimido: {os.path.basename(output_file)}")
+                    os.remove(output_file)
+            
+            await msg.delete()
+        else:
+            await msg.edit_text(f"❌ **Error:** {result.get('error', 'Error desconocido')}")
+        
+        user_states.pop(user_id, None)
+        return
+    
+    if action == 'compare':
+        msg = await message.reply_text("📊 **Comparando métodos...**", parse_mode=ParseMode.MARKDOWN)
+        
+        result = await file_compressor.compress_multiple_methods(file_path)
+        
+        os.remove(file_path)
+        
+        if result.get('success'):
+            original_mb = result['original_size'] / (1024**2)
+            text = f"**📊 Comparación de compresión:**\n\n📦 Original: {original_mb:.2f} MB\n\n"
+            
+            for r in result['results']:
+                method = r['method']
+                size_mb = r['size'] / (1024**2)
+                ratio = r['ratio']
+                text += f"**{method.upper()}**: {size_mb:.2f} MB ({ratio}% reducción)\n"
+            
+            text += f"\n🏆 **Mejor método:** {result['best_method'].upper()} ({result['best_ratio']}% reducción)"
+            
+            await msg.edit_text(text, parse_mode=ParseMode.MARKDOWN)
+            
+            for r in result['results']:
+                if os.path.exists(r['output_path']):
+                    await message.reply_document(r['output_path'], caption=f"📦 {r['method'].upper()}")
+                    os.remove(r['output_path'])
+        else:
+            await msg.edit_text(f"❌ **Error:** {result.get('error', 'Error desconocido')}")
+        
+        user_states.pop(user_id, None)
+        return
+    
+    if action.startswith('method_'):
+        method = action.replace('method_', '')
+    else:
+        method = 'gzip'
+    
+    msg = await message.reply_text(
+        f"📥 **Descargando archivo...**\n"
+        f"📦 Tamaño: {file_size / (1024**2):.1f} MB\n"
+        f"🗜️ Método: {method.upper()}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    await msg.edit_text("🔄 **Comprimiendo...**", parse_mode=ParseMode.MARKDOWN)
+    
+    result = await file_compressor.compress_file(file_path, method=method)
+    
+    os.remove(file_path)
+    
+    if result.get('success'):
+        compressed_mb = result.get('compressed_size', 0) / (1024**2)
+        ratio = result.get('compression_ratio', 0)
+        original_mb = result.get('original_size', 0) / (1024**2)
+        
+        await msg.edit_text(
+            f"📤 **Subiendo archivo comprimido...**\n"
+            f"📦 Original: {original_mb:.2f} MB\n"
+            f"💾 Comprimido: {compressed_mb:.2f} MB\n"
+            f"📊 Reducción: {ratio}%",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        await message.reply_document(
+            result['output_path'],
+            caption=f"✅ **Comprimido con {result['method'].upper()}**\n📊 Reducción: {ratio}%"
+        )
+        
+        if os.path.exists(result['output_path']):
+            os.remove(result['output_path'])
+        await msg.delete()
+    else:
+        await msg.edit_text(f"❌ **Error:** {result.get('error', 'Error desconocido')}")
+    
+    user_states.pop(user_id, None)
 
 @app.on_callback_query()
 async def handle_callback(client, callback_query: CallbackQuery):
@@ -387,6 +535,29 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.message.edit_text("**Selecciona calidad:**", reply_markup=quality_menu(), parse_mode=ParseMode.MARKDOWN)
         except:
             pass
+    elif data == "compress_video":
+        try:
+            await callback_query.message.edit_text("**📹 Envía un video para comprimirlo.**", parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+    elif data == "compress_file":
+        user_states[user_id] = {'action': 'compress_file'}
+        try:
+            await callback_query.message.edit_text("**📄 Selecciona el método de compresión:**", reply_markup=compression_method_menu(), parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+    elif data == "decompress":
+        user_states[user_id] = {'action': 'decompress'}
+        try:
+            await callback_query.message.edit_text("**📥 Envía el archivo comprimido para descomprimirlo.**", parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+    elif data == "compare_methods":
+        user_states[user_id] = {'action': 'compare'}
+        try:
+            await callback_query.message.edit_text("**📊 Envía un archivo para comparar todos los métodos.**", parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
     elif data.startswith("set_"):
         quality = data.replace("set_", "")
         user_data = await db.get_user(user_id)
@@ -397,6 +568,14 @@ async def handle_callback(client, callback_query: CallbackQuery):
         await callback_query.answer(f"✅ {QUALITIES.get(quality, quality)}")
         try:
             await callback_query.message.edit_text(f"✅ Calidad: {QUALITIES.get(quality, quality)}", parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+    elif data.startswith("method_"):
+        method = data.replace("method_", "")
+        user_states[user_id] = {'action': f'method_{method}'}
+        await callback_query.answer(f"🗜️ Método: {method.upper()}")
+        try:
+            await callback_query.message.edit_text(f"**📄 Método {method.upper()} seleccionado.**\n\nEnvía un archivo para comprimirlo.", parse_mode=ParseMode.MARKDOWN)
         except:
             pass
     elif data.startswith("yt_"):
@@ -462,7 +641,6 @@ async def handle_callback(client, callback_query: CallbackQuery):
     
     await callback_query.answer()
 
-# ========== SERVIDOR WEB PARA RENDER ==========
 async def health_check(request):
     return web.Response(text="OK")
 
@@ -476,16 +654,12 @@ async def start_web_server():
     await site.start()
     print(f"✅ WEB: Puerto {port}")
 
-# ========== INICIALIZACIÓN ==========
 async def main():
-    # 1. PRIMERO EL SERVIDOR WEB
     await start_web_server()
     await asyncio.sleep(2)
     
-    # 2. BASE DE DATOS
     await db.connect()
     
-    # 3. BOT DE TELEGRAM
     await app.start()
     print("✅ BOT: Iniciado!")
     

@@ -8,20 +8,13 @@ class VideoCompressor:
         self.active_compressions = {}
         
     async def compress_video(self, input_path: str, output_path: str, quality: str = "medium", user_id: int = None):
-        """Comprime video usando FFmpeg - SIN LÍMITES para admin"""
         try:
-            # Verificar si es admin para usar máxima calidad
             if user_id and user_id == ADMIN_ID:
                 settings = "-c:v libx265 -crf 18 -preset slow -c:a aac -b:a 192k"
             else:
                 settings = FFMPEG_SETTINGS.get(quality, FFMPEG_SETTINGS["medium"])
             
-            cmd = [
-                'ffmpeg', '-i', input_path,
-                *settings.split(),
-                '-y',
-                output_path
-            ]
+            cmd = ['ffmpeg', '-i', input_path, *settings.split(), '-y', output_path]
             
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -32,7 +25,6 @@ class VideoCompressor:
             self.active_compressions[input_path] = process
             
             stdout, stderr = await process.communicate()
-            
             del self.active_compressions[input_path]
             
             if process.returncode == 0 and os.path.exists(output_path):
@@ -49,13 +41,12 @@ class VideoCompressor:
                 }
             else:
                 error_msg = stderr.decode() if stderr else "Error desconocido"
-                return {'success': False, 'error': error_msg[:200]}
+                return {'success': False, 'error': error_msg[:500]}
                 
         except Exception as e:
             return {'success': False, 'error': str(e)[:200]}
             
     async def cancel_compression(self, input_path: str):
-        """Cancela compresión en curso"""
         if input_path in self.active_compressions:
             process = self.active_compressions[input_path]
             process.terminate()

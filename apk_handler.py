@@ -18,36 +18,60 @@ class APKDownloader:
             await self.session.close()
             
     async def extract_apkpure_info(self, url: str):
-        """Extrae información del APK desde APKPure"""
         await self.init_session()
         
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
             
-            async with self.session.get(url, headers=headers) as response:
+            async with self.session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
+                    return None
+                    
                 html = await response.text()
                 soup = BeautifulSoup(html, 'lxml')
                 
-                # Extraer información básica
                 title_elem = soup.find('h1', {'class': 'title'}) or soup.find('h1')
                 version_elem = soup.find('span', {'itemprop': 'version'})
                 size_elem = soup.find('span', {'class': 'detail-sdk'})
                 
-                # Buscar link de descarga
                 download_links = []
                 for link in soup.find_all('a', href=True):
                     href = link.get('href', '')
-                    if 'download' in href.lower() and 'apk' in href.lower():
+                    if 'download' in href.lower() and ('apk' in href.lower() or 'd.apkpure.com' in href):
+                        if href.startswith('//'):
+                            href = 'https:' + href
+                        elif not href.startswith('http'):
+                            href = 'https://apkpure.com' + href
                         download_links.append(href)
                 
+                package_name = self.extract_package_name(url)
+                
+                if not title_elem:
+                    title_match = re.search(r'<h1[^>]*>([^<]+)</h1>', html)
+                    title = title_match.group(1) if title_match else 'Unknown'
+                else:
+                    title = title_elem.text.strip()
+                
+                if not version_elem:
+                    version_match = re.search(r'version["\s:=]+([^"<&\n]+)', html)
+                    version = version_match.group(1).strip() if version_match else 'Unknown'
+                else:
+                    version = version_elem.text.strip()
+                
+                if not size_elem:
+                    size_match = re.search(r'(\d+\.?\d*\s*[MGT]B)', html)
+                    size = size_match.group(1) if size_match else 'Unknown'
+                else:
+                    size = size_elem.text.strip()
+                
                 return {
-                    'title': title_elem.text.strip() if title_elem else 'Unknown',
-                    'version': version_elem.text.strip() if version_elem else 'Unknown',
-                    'size': size_elem.text.strip() if size_elem else 'Unknown',
-                    'download_links': download_links[:5],
-                    'package_name': self.extract_package_name(url)
+                    'title': title,
+                    'version': version,
+                    'size': size,
+                    'download_links': download_links[:5] if download_links else [],
+                    'package_name': package_name
                 }
                 
         except Exception as e:
@@ -55,57 +79,61 @@ class APKDownloader:
             return None
             
     def extract_package_name(self, url: str):
-        """Extrae el nombre del paquete de la URL"""
         parsed = urlparse(url)
-        path_parts = parsed.path.split('/')
+        path_parts = parsed.path.strip('/').split('/')
         
-        # Buscar patrón de nombre de paquete
-        for part in path_parts:
-            if '.' in part and len(part) > 5:
-                return part
-                
-        # Intentar de query params
+        if len(path_parts) >= 2:
+            for part in path_parts:
+                if '.' in part and len(part) > 4:
+                    return part
+        
+        match = re.search(r'/([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)/', parsed.path)
+        if match:
+            return match.group(1)
+        
         params = parse_qs(parsed.query)
-        return params.get('package', ['unknown'])[0]
+        if 'package' in params:
+            return params['package'][0]
+        
+        return 'unknown'
         
     async def download_apk(self, url: str) -> str:
-        """Descarga APK desde APKPure"""
         await self.init_session()
         
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/vnd.android.package-archive,*/*',
                 'Referer': 'https://apkpure.com/'
             }
             
-            # Si es URL directa de descarga
+            os.makedirs("downloads", exist_ok=True)
+            
             if 'd.apkpure.com' in url:
                 filename = f"downloads/apk_{hash(url)}.apk"
-                os.makedirs("downloads", exist_ok=True)
                 
-                async with self.session.get(url, headers=headers) as response:
+                async with self.session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=300)) as response:
                     if response.status == 200:
                         async with aiofiles.open(filename, 'wb') as f:
-                            await f.write(await response.read())
+                            async for chunk in response.content.iter_chunked(8192):
+                                await f.write(chunk)
                         return filename
             else:
-                # Extraer info y buscar link de descarga
                 info = await self.extract_apkpure_info(url)
                 if info and info['download_links']:
                     download_url = info['download_links'][0]
-                    if not download_url.startswith('http'):
-                        download_url = f"https://apkpure.com{download_url}"
                     
-                    filename = f"downloads/{info['package_name']}_{info['version']}.apk"
-                    os.makedirs("downloads", exist_ok=True)
+                    package = info.get('package_name', 'unknown')
+                    version = info.get('version', 'unknown')
+                    filename = f"downloads/{package}_{version}.apk"
                     
-                    async with self.session.get(download_url, headers=headers) as response:
+                    async with self.session.get(download_url, headers=headers, timeout=aiohttp.ClientTimeout(total=300)) as response:
                         if response.status == 200:
                             async with aiofiles.open(filename, 'wb') as f:
-                                await f.write(await response.read())
+                                async for chunk in response.content.iter_chunked(8192):
+                                    await f.write(chunk)
                             return filename
-                            
+            
             return None
             
         except Exception as e:
