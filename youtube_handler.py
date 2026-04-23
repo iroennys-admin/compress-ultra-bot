@@ -4,18 +4,13 @@ from typing import Optional, Dict, List
 
 class YouTubeDownloader:
     def __init__(self):
-        self.ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
-        }
+        pass
 
     async def get_video_info(self, url: str) -> Optional[Dict]:
         try:
             opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': False,
             }
             
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -31,30 +26,29 @@ class YouTubeDownloader:
                 for fmt in info.get('formats', []):
                     height = fmt.get('height')
                     format_id = fmt.get('format_id', '')
-                    ext = fmt.get('ext', 'mp4')
                     filesize = fmt.get('filesize') or fmt.get('filesize_approx', 0)
                     vcodec = fmt.get('vcodec', 'none')
                     acodec = fmt.get('acodec', 'none')
+                    
+                    has_video = vcodec != 'none'
+                    has_audio = acodec != 'none'
                     
                     if height and height not in seen:
                         seen.add(height)
                         formats.append({
                             'format_id': format_id,
-                            'ext': ext,
                             'resolution': f"{height}p",
                             'filesize': filesize,
-                            'vcodec': vcodec,
-                            'acodec': acodec,
+                            'combined': has_video and has_audio,
                         })
                 
                 formats.sort(key=lambda x: int(x['resolution'].replace('p', '')))
-                formats = formats[:12]
+                formats = formats[:10]
                 
                 return {
                     'id': info.get('id'),
                     'title': info.get('title', 'Unknown')[:100],
                     'duration': duration,
-                    'thumbnail': info.get('thumbnail'),
                     'uploader': info.get('uploader', 'Unknown'),
                     'view_count': info.get('view_count', 0),
                     'formats': formats
@@ -71,27 +65,22 @@ class YouTubeDownloader:
                 'quiet': False,
                 'no_warnings': True,
                 'outtmpl': 'downloads/%(id)s.%(ext)s',
-                'merge_output_format': 'mp4',
             }
             
-            if format_id:
-                if format_id == 'bestaudio':
-                    opts['format'] = 'bestaudio[ext=m4a]/bestaudio/best'
-                else:
-                    opts['format'] = f'{format_id}+bestaudio/{format_id}'
-            else:
+            if format_id == 'bestaudio':
+                opts['format'] = 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'
+            elif quality:
                 height = quality.replace('p', '')
-                opts['format'] = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]/best'
+                opts['format'] = f'best[height<={height}][ext=mp4]/best[height<={height}]/best'
+            else:
+                opts['format'] = 'best'
             
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 
                 if info:
-                    filename = ydl.prepare_filename(info)
-                    if os.path.exists(filename):
-                        return filename
-                    
-                    files = [f for f in os.listdir('downloads') if f.startswith(info.get('id', ''))]
+                    video_id = info.get('id', '')
+                    files = [f for f in os.listdir('downloads') if f.startswith(video_id)]
                     if files:
                         return os.path.join('downloads', files[0])
             

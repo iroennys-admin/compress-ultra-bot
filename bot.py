@@ -97,9 +97,8 @@ def youtube_quality_menu(info):
         if fmt.get('filesize'):
             size_mb = fmt.get('filesize', 0) / (1024 * 1024)
             label += f" ({size_mb:.1f}MB)"
-        if fmt.get('ext'):
-            label += f" [{fmt.get('ext').upper()}]"
-        buttons.append([InlineKeyboardButton(label, callback_data=f"yt_dl_{fmt['format_id']}")])
+        res = fmt.get('resolution', '720p').replace('p', '')
+        buttons.append([InlineKeyboardButton(label, callback_data=f"yt_res_{res}")])
     
     buttons.append([InlineKeyboardButton("🔊 Solo Audio", callback_data="yt_audio")])
     buttons.append([InlineKeyboardButton("🔙 Cancelar", callback_data="cancel_yt")])
@@ -678,17 +677,17 @@ async def handle_callback(client, callback_query: CallbackQuery):
             await callback_query.message.edit_text("❌ Compresión cancelada")
         except:
             pass
-    elif data.startswith("yt_dl_"):
-        format_id = data.replace("yt_dl_", "")
+    elif data.startswith("yt_res_"):
+        resolution = data.replace("yt_res_", "")
         state = user_states.get(user_id, {})
         
         if not state:
             await callback_query.answer("❌ Sesión expirada", show_alert=True)
             return
         
-        await safe_edit(callback_query.message, "⏳ Descargando...", parse_mode=ParseMode.MARKDOWN)
+        await safe_edit(callback_query.message, f"⏳ Descargando {resolution}p...", parse_mode=ParseMode.MARKDOWN)
         
-        video_path = await youtube_dl.download_video(state['yt_url'], format_id=format_id)
+        video_path = await youtube_dl.download_video(state['yt_url'], quality=f"{resolution}p")
         
         if video_path and os.path.exists(video_path):
             size = os.path.getsize(video_path) / (1024**2)
