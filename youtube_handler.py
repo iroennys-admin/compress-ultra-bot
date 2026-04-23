@@ -9,9 +9,6 @@ class YouTubeDownloader:
             'no_warnings': True,
             'extract_flat': False,
         }
-        
-        if os.path.exists('cookies.txt'):
-            self.ydl_opts['cookiefile'] = 'cookies.txt'
 
     async def get_video_info(self, url: str) -> Optional[Dict]:
         try:
@@ -19,11 +16,7 @@ class YouTubeDownloader:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                'extract_info口味': True,
             }
-            
-            if os.path.exists('cookies.txt'):
-                opts['cookiefile'] = 'cookies.txt'
             
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -54,9 +47,6 @@ class YouTubeDownloader:
                                 'ext': ext,
                                 'resolution': f"{height}p",
                                 'filesize': filesize,
-                                'tbr': fmt.get('tbr', 0),
-                                'vcodec': fmt.get('vcodec', 'none'),
-                                'acodec': fmt.get('acodec', 'none'),
                             })
                 
                 formats.sort(key=lambda x: int(x['resolution'].replace('p', '')) if x['resolution'].replace('p', '').isdigit() else 0)
@@ -89,11 +79,12 @@ class YouTubeDownloader:
                 'merge_output_format': 'mp4',
             }
             
-            if os.path.exists('cookies.txt'):
-                opts['cookiefile'] = 'cookies.txt'
-            
             if format_id:
-                opts['format'] = format_id
+                if format_id == 'bestaudio':
+                    opts['format'] = 'bestaudio/best'
+                    opts['merge_output_format'] = 'mp3'
+                else:
+                    opts['format'] = format_id
             else:
                 height = quality.replace('p', '')
                 opts['format'] = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]'
@@ -106,14 +97,14 @@ class YouTubeDownloader:
                     if os.path.exists(filename):
                         return filename
                     
-                    for ext in ['mp4', 'webm', 'mkv', 'flv', 'avi', 'mov']:
-                        test_file = f"downloads/test.{ext}"
-                        if os.path.exists(test_file):
-                            return test_file
+                    for ext in ['mp4', 'webm', 'mkv', 'flv', 'avi', 'mov', 'mp3']:
+                        files = [f for f in os.listdir('downloads') if f.endswith(f'.{ext}')]
+                        if files:
+                            return os.path.join('downloads', files[-1])
                     
                     files = os.listdir('downloads')
                     for f in files:
-                        if info.get('id') in f:
+                        if os.path.join('downloads', f) != filename:
                             return os.path.join('downloads', f)
             
             return None
@@ -121,29 +112,5 @@ class YouTubeDownloader:
         except Exception as e:
             print(f"Error downloading video: {e}")
             return None
-
-    async def get_formats_list(self, info: Dict) -> List[Dict]:
-        formats = []
-        
-        resolution_files = {}
-        
-        for fmt in info.get('formats', []):
-            height = fmt.get('height')
-            if not height:
-                continue
-            
-            resolution = f"{height}p"
-            if resolution not in resolution_files:
-                resolution_files[resolution] = {
-                    'format_id': fmt.get('format_id'),
-                    'ext': fmt.get('ext', 'mp4'),
-                    'resolution': resolution,
-                    'filesize': fmt.get('filesize') or fmt.get('filesize_approx', 0),
-                }
-        
-        for res, data in sorted(resolution_files.items(), key=lambda x: int(x[0].replace('p', ''))):
-            formats.append(data)
-        
-        return formats[:10]
 
 youtube_dl = YouTubeDownloader()
